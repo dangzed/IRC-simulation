@@ -15,9 +15,6 @@ typedef struct user {
 	SOCKET userSock;
 	string password;
 	int isSignedIn;
-	vector<string> friendRequestFrom;
-	vector<string> friendRequestTo;
-	vector<string> friends;
 }user;
 
 extern vector<user> userList; 

@@ -28,7 +28,7 @@ SOCKET findSocket(const string& nick)
 string findNick(const SOCKET& sock)
 {
 	for (auto& u : userList)
-		if (u.userSock == sock)
+		if (u.userSock == sock && u.isSignedIn)
 			return u.nickname;
 	return "nonexist";
 }

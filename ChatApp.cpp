@@ -39,7 +39,8 @@ int main(int argc, char** argv)
 		"CREATE TABLE Request("
 		"fromFriend text	 NOT NULL, "
 		"toFriend	text	 NOT NULL, "
-		"PRIMARY KEY(fromFriend, toFriend)); "
+		"isAccepted	int	 NOT NULL, "
+		"PRIMARY KEY(fromFriend, toFriend));"
 		;
 	int exit = 0;
 	exit = sqlite3_open("chatapp.db", &DB);
@@ -167,6 +168,12 @@ int main(int argc, char** argv)
 							break;
 						}
 
+						if (currentUsername != "nonexist")
+						{
+							echoToClient("SIGN_OUT_FIRST", client[i]);
+							break;
+						}
+
 						string insertSql =
 							"INSERT INTO user VALUES ("
 							+ quotesql(buffPiece[1]) + ","
@@ -174,7 +181,7 @@ int main(int argc, char** argv)
 							+ quotesql(buffPiece[2]) + ", 1);";
 
 						int result = sqlite3_exec(DB, insertSql.c_str(), NULL, 0, NULL);
-
+						
 						if (result != SQLITE_OK) {
 							echoToClient("FAIL USERNAME_ALREADY_EXIST", client[i]);
 							break;
@@ -198,6 +205,12 @@ int main(int argc, char** argv)
 							break;
 						}
 
+						if (currentUsername != "nonexist")
+						{
+							echoToClient("SIGN_OUT_FIRST", client[i]);
+							break;
+						}
+
 						string selectSql = "SELECT * FROM user WHERE username=" + quotesql(buffPiece[1])
 							+ " AND password=" + quotesql(buffPiece[2]);
 
@@ -205,7 +218,7 @@ int main(int argc, char** argv)
 						{
 							echoToClient("FAIL INCORRECT_USERNAME_OR_PASSWORD", client[i]);
 							break;
-						}
+						} 
 
 						selectSql = "SELECT * FROM user WHERE username=" + quotesql(buffPiece[1]) + " AND isSignedIn=0";
 						if (hasResult(DB, selectSql) < 0)
@@ -223,7 +236,7 @@ int main(int argc, char** argv)
 						userList.clear();
 						sqlite3_exec(DB, selectSql.c_str(), callback, 0, NULL);
 
-						echoToClient("SUCCESS " + buffPiece[1], client[i]);
+						echoToClient("SUCCESS", client[i]);
 
 					}
 
@@ -243,15 +256,31 @@ int main(int argc, char** argv)
 						}
 	
 
-						string updateSql = string("UPDATE user SET username=") + quotesql(buffPiece[1]) 
-											  + ", password=" + quotesql(buffPiece[2])
-											  + " WHERE username=" + quotesql(currentUsername);
+						string updateSql = string("UPDATE user SET username=") + quotesql(buffPiece[1])
+							+ ", password=" + quotesql(buffPiece[2])
+							+ " WHERE username=" + quotesql(currentUsername)
+
+							+ "; UPDATE channel_user SET member_name=" + quotesql(buffPiece[1])
+							+ "WHERE member_name=" + quotesql(currentUsername)
+
+							+ "; UPDATE friend SET owner=" + quotesql(buffPiece[1])
+							+ "WHERE owner=" + quotesql(currentUsername)
+
+							+ "; UPDATE friend SET theFriend=" + quotesql(buffPiece[1])
+							+ "WHERE theFriend=" + quotesql(currentUsername)
+
+							+ "; UPDATE Request SET fromFriend=" + quotesql(buffPiece[1])
+							+ "WHERE fromFriend=" + quotesql(currentUsername)
+
+							+ "; UPDATE Request SET toFriend=" + quotesql(buffPiece[1])
+							+ "WHERE toFriend=" + quotesql(currentUsername);
+
 						int result = sqlite3_exec(DB, updateSql.c_str(), NULL, 0, NULL);
 						if (result != SQLITE_OK) {
-							echoToClient("FAIL USERNAME_ALREADY_EXIST", client[i]);
+							echoToClient("FAIL", client[i]);
 							break;
 						}
-						echoToClient("SUCCESS " + buffPiece[1], client[i]);
+						echoToClient("SUCCESS", client[i]);
 					}
 
 					// SIGNOUT sign out
@@ -273,11 +302,117 @@ int main(int argc, char** argv)
 							// set isSignedIn to false
 							string updateSql = "UPDATE user SET isSignedIn=0 WHERE socket=" + to_string(client[i]) ;
 							sqlite3_exec(DB, updateSql.c_str(), NULL, 0, NULL);
-							string selectSql = "SELECT * FROM user;";
-							userList.clear();
-							sqlite3_exec(DB, selectSql.c_str(), callback, 0, NULL);
 							echoToClient("User sign out", client[i]);
+							
+							/*string selectSql = "SELECT * FROM user;";
+							userList.clear();
+							sqlite3_exec(DB, selectSql.c_str(), callback, 0, NULL);*/
 						}
+					}
+
+					// LIST_FRIEND list all friend
+					else if (buffPiece[0] == "LIST_FRIEND")
+					{
+						if (buffPiece.size() != 1)
+						{
+							echoToClient(ERROR_NUMBER_OF_ARGUMENTS, client[i]);
+							break;
+						}
+
+						if (currentUsername == "nonexist")
+						{
+							echoToClient(NOT_SIGN_IN, client[i]); 
+							break;
+						}
+						string selectSql = "SELECT theFriend FROM friend WHERE owner=" + quotesql(currentUsername);
+						globalVar.clear();
+						sqlite3_exec(DB, selectSql.c_str(), resultCallback, 0, NULL);
+
+						string response = "SUCCESS";
+						for (auto& a : globalVar)
+						{
+							response += " ";
+							response += a;
+						}
+						echoToClient(response, client[i]);
+					}
+
+					// LIST_ACTIVE_FRIEND list all active friend
+					else if (buffPiece[0] == "LIST_FRIEND")
+					{
+						if (buffPiece.size() != 1)
+						{
+							echoToClient(ERROR_NUMBER_OF_ARGUMENTS, client[i]);
+							break;
+						}
+
+						if (currentUsername == "nonexist")
+						{
+							echoToClient(NOT_SIGN_IN, client[i]);
+							break;
+						}
+						string selectSql = "SELECT theFriend FROM friend WHERE owner=" + quotesql(currentUsername)
+							+ " AND theFriend IN (SELECT username FROM user WHERE isSignedIn=1)";
+						globalVar.clear();
+						sqlite3_exec(DB, selectSql.c_str(), resultCallback, 0, NULL);
+
+						string response = "SUCCESS";
+						for (auto& a : globalVar)
+						{
+							response += " ";
+							response += a;
+						}
+						echoToClient(response, client[i]);
+					}
+
+					// SEARCH_FRIEND search friend
+					else if (buffPiece[0] == "SEARCH_FRIEND")
+					{
+						if (buffPiece.size() != 2)
+						{
+							echoToClient(ERROR_NUMBER_OF_ARGUMENTS, client[i]);
+							break;
+						}
+
+						if (currentUsername == "nonexist")
+						{
+							echoToClient(NOT_SIGN_IN, client[i]);
+							break;
+						}
+						string selectSql = "SELECT theFriend FROM friend WHERE owner=" + quotesql(currentUsername)
+							+ " AND theFriend LIKE '%" + quotesql(buffPiece[1]) + "%'";
+						globalVar.clear();
+						sqlite3_exec(DB, selectSql.c_str(), resultCallback, 0, NULL);
+
+						string response = "SUCCESS";
+						for (auto& a : globalVar)
+						{
+							response += " ";
+							response += a;
+						}
+						echoToClient(response, client[i]);
+					}
+
+				// FRIENDMSG: send message to an user
+					else if (buffPiece.at(0) == "FRIENDMSG")
+					{
+						if (buffPiece.size() < 3)
+						{
+							echoToClient(ERROR_NUMBER_OF_ARGUMENTS, client[i]);
+							break;
+						}
+
+						if (currentUsername == "nonexist")
+						{
+							echoToClient(NOT_SIGN_IN, client[i]);
+							break;
+						}
+
+						string msg;
+						for (int j = 2; j < buffPiece.size(); j++)
+							msg = msg + buffPiece[j] + " ";
+
+						string selectSql = "SELECT socket"
 					}
 
 					// ADDFRIEND add friend
@@ -314,13 +449,13 @@ int main(int argc, char** argv)
 
 						if (hasResult(DB, selectSql) < 0)
 						{
-							echoToClient("FAIL CANNOT_ADD_FRIEND", client[i]);
+							echoToClient("FAIL ALREADY_FRIEND", client[i]);
 							break;
 						}
 
 						string insertSql = string("INSERT INTO Request values((SELECT username FROM user WHERE socket=") + 
 													to_string(client[i]) + ")," + 
-													quotesql(buffPiece[1]) + ")"; 
+													quotesql(buffPiece[1]) + ", 0)"; 
 
 						int result = sqlite3_exec(DB, insertSql.c_str(), NULL, 0, NULL);
 
@@ -330,10 +465,10 @@ int main(int argc, char** argv)
 							echoToClient("FAIL ALREADY_ADD_FRIEND", client[i]);
 							break;
 						}
-						echoToClient("SUCCESS TO_" + buffPiece[1] , client[i]);
+						echoToClient("SUCCESS", client[i]);
 
 						// maybe check if the friend is online then echo
-						echoToClient("SUCCESS FROM_" + globalVar[1], stoi(globalVar[0]));
+						echoToClient("SUCCESS REQUEST_FROM " + globalVar[1], stoi(globalVar[0]));
 
 					}
 
@@ -364,124 +499,106 @@ int main(int argc, char** argv)
 							break;
 						}
 
-						// check if there exist a friend request, maybe not need because of mobile GUI restriction
-
-
 						//update friend and request table
-						string deleteSql = "DELETE FROM Request WHERE fromFriend=" + quotesql(buffPiece[1]) + " AND toFriend=" + quotesql(globalVar[1]) +
+						string updateSql = "UPDATE Request SET  isAccepted = 1 WHERE fromFriend=" + quotesql(buffPiece[1]) + " AND toFriend=" + quotesql(globalVar[1]) +
 							";INSERT INTO friend VALUES(" + quotesql(globalVar[1]) + ", " + quotesql(buffPiece[1]) + ");"
 							"INSERT INTO friend VALUES(" + quotesql(buffPiece[1]) + ", " + quotesql(globalVar[1]) + ");";
+						int result = sqlite3_exec(DB, updateSql.c_str(), NULL, 0, NULL);
+
+						if (result != SQLITE_OK)
+						{
+							echoToClient("FAIL NO_REQUEST", client[i]);
+							break;
+						}
+						echoToClient("SUCCESS", client[i]);
+						echoToClient("SUCCESS ACCEPT_FROM " + globalVar[1], stoi(globalVar[0]));
+
+					}
+
+					// JOIN: join channel, echo notification 
+					else if (buffPiece[0] == "JOIN")
+					{
+						if (buffPiece.size() != 2)
+						{
+							notiString = "Error number of arguments! ";
+							echoToClient(notiString, client[i]);
+							break;
+						}
+
+						if (currentUsername == "nonexist")
+						{
+							echoToClient(NOT_SIGN_IN, client[i]);
+							break;
+						}
+						
+						string insertSql = "INSERT INTO channel_user VALUES((SELECT channel_name FROM channel_user WHERE channel_name="
+							+ quotesql(buffPiece[1]) + " LIMIT 1)," + quotesql(currentUsername) + ")";
+						
+						int result = sqlite3_exec(DB, insertSql.c_str(), NULL, 0, NULL);
+
+						if (result != SQLITE_OK)
+						{
+							echoToClient("FAIL", client[i]);
+							break;
+						}
+						echoToClient("SUCCESS", client[i]);
+						echoToClient("SUCCESS JOIN_FROM "+)
+					}
+
+					// CREATE: create channel 
+					else if (buffPiece[0] == "CREATE")
+					{
+						if (buffPiece.size() != 2)
+						{
+							notiString = "Error number of arguments! ";
+							echoToClient(notiString, client[i]);
+							break;
+						}
+
+						if (currentUsername == "nonexist")
+						{
+							echoToClient(NOT_SIGN_IN, client[i]);
+							break;
+						}
+
+						string insertSql = "INSERT INTO channel_user VALUES(" + quotesql(buffPiece[1]) + ","  + quotesql(currentUsername) + ")";
+
+						int result = sqlite3_exec(DB, insertSql.c_str(), NULL, 0, NULL);
+
+						if (result != SQLITE_OK)
+						{
+							echoToClient("FAIL GROUP_EXISTS", client[i]);
+							break;
+						}
+						echoToClient("SUCCESS", client[i]);
+					}
+					
+					// QUIT: get out of a channel 
+					else if (buffPiece.at(0) == "QUIT")
+					{
+						if (buffPiece.size() != 2)
+						{
+							echoToClient("Error number of arguments! ", client[i]);
+							break;
+						}
+
+						if (currentUsername == "nonexist")
+						{
+							echoToClient(NOT_SIGN_IN, client[i]);
+							break;
+						}
+
+						string deleteSql = "DELETE FROM channel_user WHERE member_name=" + quotesql(currentUsername);
 						int result = sqlite3_exec(DB, deleteSql.c_str(), NULL, 0, NULL);
 
 						if (result != SQLITE_OK)
 						{
-							echoToClient("FAIL SOMETHING", client[i]);
+							echoToClient("FAIL", client[i]);
 							break;
 						}
-						echoToClient("SUCCESS NOW_YOU_ARE_FRIEND_WITH_" + buffPiece[1], client[i]);
-						echoToClient("SUCCESS " + globalVar[1] + "_ACCEPT_YOUR_FRIEND_REQUEST", stoi(globalVar[0]));
+						echoToClient("SUCCESS ", client[i]);
 
 					}
-
-						//// JOIN: join channel, echo notification 
-						//else if (buffPiece[0] == "JOIN")
-						//{
-						//	if (buffPiece.size() != 2)
-						//	{
-						//		notiString = "Error number of arguments! ";
-						//		echoToClient(notiString, client[i]);
-						//		break;
-						//	}
-
-						//	if (currentUsername == "nonexist" || !userList[findUserBySocket(client[i])].isSignedIn)
-						//	{
-						//		echoToClient("Please sign in first ", client[i]);
-						//		break;
-						//	}
-
-						//	// find current channel of user
-						//	int found = findChannelByName(buffPiece[1]);
-						//	bool alreadyInThisChannel = false;
-
-						//	if (found >= 0)		// channel is in channelList
-						//	{
-						//		for (auto& u : channelList[found].member)
-						//			if (u.nickname == currentUsername)
-						//			{
-						//				echoToClient("You are already in channel " + channelList[found].name, client[i]);
-						//				alreadyInThisChannel = true;
-						//				break;
-						//			}
-
-						//		// join argument channel, echo to all client in argument channel
-						//		if (!alreadyInThisChannel)
-						//			for (auto& u : userList)
-						//				if (u.userSock == client[i])
-						//				{
-						//					channelList[found].member.push_back(u);
-						//					notiString = u.nickname + " join channel " + channelList[found].name;
-						//					// echo noti to all client in new channel
-						//					for (auto& us : channelList[found].member)
-						//						if (us.isSignedIn)
-						//							echoToClient(notiString, us.userSock);
-						//					break;
-						//				}
-						//	}
-
-						//	else 	// if channel not existed create one
-						//	{
-						//		for (auto& u : userList)
-						//			if (u.userSock == client[i])
-						//			{
-						//				channel tempChannel;
-						//				tempChannel.name = buffPiece[1];
-						//				tempChannel.member.push_back(u);
-						//				channelList.push_back(tempChannel);
-						//				notiString = u.nickname + " create new channel: " + tempChannel.name;
-						//				echoToClient(notiString, client[i]);
-						//				break;
-						//			}
-						//	}
-						//}
-
-						//// QUIT: get out of a channel 
-						//else if (buffPiece.at(0) == "PART")
-						//{
-						//	if (buffPiece.size() != 2)
-						//	{
-						//		echoToClient("Error number of arguments! ", client[i]);
-						//		break;
-						//	}
-
-						//	if (currentUsername == "nonexist" || !userList[findUserBySocket(client[i])].isSignedIn)
-						//	{
-						//		echoToClient("Please sign in first ", client[i]);
-						//		break;
-						//	}
-
-						//	int found = findChannelByName(buffPiece[1]);
-						//	if (found < 0)
-						//	{
-						//		echoToClient("No channel with that name on server", client[i]);
-						//		break;
-						//	}
-						//	bool inFoundChannel = false;
-
-						//	for (int j = 0; j < channelList[found].member.size(); j++)
-						//		if (channelList[found].member[j].userSock == client[i])
-						//		{
-						//			inFoundChannel = true;
-						//			channelList[found].member.erase(channelList[found].member.begin() + j);
-						//			notiString = currentUsername + " left group " + channelList[found].name;
-						//			for (auto& u : channelList[found].member)
-						//				if (u.isSignedIn && u.userSock != client[i])
-						//					echoToClient(notiString, u.userSock);
-						//			echoToClient("You left group " + channelList[found].name, client[i]);
-						//			break;
-						//		}
-						//	if (!inFoundChannel)
-						//		echoToClient("You are not in this group", client[i]);
-						//}
 
 						//// LISTGROUP: show all channel and number of members per channel
 						//else if (buffPiece.at(0) == "LISTGROUP")
@@ -521,40 +638,7 @@ int main(int argc, char** argv)
 						//		echoToClient(u.nickname + "\n", client[i]);
 						//}
 
-						//// USERMSG: send message to an user
-						//else if (buffPiece.at(0) == "USERMSG")
-						//{
-						//	bool found = false;
-
-						//	if (buffPiece.size() < 3)
-						//	{
-						//		notiString = "Missing argument! ";
-						//		echoToClient(notiString, client[i]);
-						//		break;
-						//	}
-
-						//	if (currentUsername == "nonexist" || !userList[findUserBySocket(client[i])].isSignedIn)
-						//	{
-						//		notiString = "Please sign in first ";
-						//		echoToClient(notiString, client[i]);
-						//		break;
-						//	}
-
-						//	string msg;
-						//	for (int j = 2; j < buffPiece.size(); j++)
-						//		msg = msg + buffPiece[j] + " ";
-
-						//	for (auto& a : userList)
-						//		if (a.nickname == buffPiece[1] && a.isSignedIn)
-						//		{
-						//			echoToClient(currentUsername + ">> " + msg, a.userSock);
-						//			found = true;
-						//			break;
-						//		}
-
-						//	if (!found)
-						//		echoToClient("No user has name " + buffPiece[1], client[i]);
-						//}
+						
 
 						//// GROUPMSG: send message to a group
 						//else if (buffPiece.at(0) == "GROUPMSG")
