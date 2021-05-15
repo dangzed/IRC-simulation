@@ -1,39 +1,43 @@
-#define _CRT_SECURE_NO_WARNINGS
-#define _WINSOCK_DEPRECATED_NO_WARNINGS
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <errno.h>
+#include <sys/types.h>
+#include <time.h>
+
 #include <iostream>
-#include <WS2tcpip.h>
-#include <process.h>
 #include <string>
 #include <vector>
 #include <sstream>
-#pragma comment (lib, "ws2_32.lib")
 using namespace std;
 #define BUFF_SIZE 1024
 
-typedef struct user {
+typedef struct user
+{
 	string nickname;
-	SOCKET userSock;
+	int userSock;
 	string password;
 	int isSignedIn;
-}user;
+} user;
 
-extern vector<user> userList; 
+extern vector<user> userList;
 
-typedef struct channel {
+typedef struct channel
+{
 	string name;
 	vector<string> member;
-}channel;
+} channel;
 
 extern vector<channel> channelList;
 extern vector<string> globalVar;
 
-vector<string> split(const string& s, char delim);
-SOCKET findSocket(const string& nick);				// find socket based on nickname
-string findNick(const SOCKET& sock);				// find nickname based on socket
-int findUserBySocket(const SOCKET& sock);					// find user based on socket
-int findUserByName(const string& username);
-//int findChannelByUsername(const string& username);
-int findChannelByName(const string& name);
-//void deleteUserOutOfChannel(int index, const SOCKET& sock);
-void echoToClient(const string& notiString, const SOCKET& soc);
-string quotesql(const string& s);
+vector<string> split(const string &s, char delim);
+int findSocket(const string &nick);	   // find socket based on nickname
+string findNick(const int &sock);	   // find nickname based on socket
+int findUserBySocket(const int &sock); // find user based on socket
+int findUserByName(const string &username);
+int findChannelByName(const string &name);
+void echoToClient(const string &notiString, const int &soc);
+string quotesql(const string &s);
