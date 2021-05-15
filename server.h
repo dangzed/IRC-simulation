@@ -6,7 +6,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <time.h>
-
+#include <string.h>
 #include <iostream>
 #include <string>
 #include <vector>
