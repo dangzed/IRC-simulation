@@ -85,7 +85,7 @@ int main(int argc, char **argv)
 
 		if (nEvents < 0)
 		{
-			cout << "\nError! Cannot poll socket " << WSAGetLastError() << endl;
+			cout << "\nError! Cannot poll socket\n";
 			return 0;
 		}
 
@@ -95,7 +95,7 @@ int main(int argc, char **argv)
 
 			if ((connSock = accept(listenSock, (sockaddr *)&clientAddr, &clientAddrLen)) < 0)
 			{
-				cout << "\nError! Cannot accept new connection: %d", WSAGetLastError();
+				cout << "\nError! Cannot accept new connection";
 				break;
 			} // do accept function
 
@@ -391,7 +391,7 @@ int main(int argc, char **argv)
 						for (int j = 2; j < buffPiece.size(); j++)
 							msg = msg + buffPiece[j] + " ";
 
-						string selectSql = "SELECT socket"
+						string selectSql = "SELECT socket";
 					}
 
 					// ADDFRIEND add friend
@@ -514,7 +514,7 @@ int main(int argc, char **argv)
 							break;
 						}
 						echoToClient("SUCCESS", client[i]);
-						echoToClient("SUCCESS JOIN_FROM " +)
+						echoToClient("SUCCESS JOIN_FROM ", client[i]);
 					}
 
 					// CREATE: create channel
