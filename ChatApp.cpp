@@ -65,7 +65,8 @@ int main(int argc, char **argv)
 	int client[FD_SETSIZE], connSock;
 	fd_set readfds, initfds; //use initfds to initiate readfds at the begining of every loop step
 	sockaddr_in clientAddr;
-	int nEvents, ret, clientAddrLen = sizeof(clientAddr);
+	int nEvents, ret;
+	socklen_t clientAddrLen = sizeof(clientAddr);
 	char buff[BUFF_SIZE];
 
 	for (size_t i = 0; i < FD_SETSIZE; i++)
