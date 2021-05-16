@@ -49,108 +49,111 @@ int main(int argc, char **argv)
 		return 0;
 	}
 
-	// Create a socket
-	int listenSock = socket(AF_INET, SOCK_STREAM, 0);
+	int i, maxi, maxfd, listenfd, connfd, sockfd;
+	int nready, client[FD_SETSIZE];
+	ssize_t ret;
+	fd_set readfds, allset;
+	char sendBuff[BUFF_SIZE], rcvBuff[BUFF_SIZE];
+	socklen_t clilen;
+	struct sockaddr_in cliaddr, servaddr;
 
-	// Bind the socket to ip address and port
-	sockaddr_in serverAddr;
-	serverAddr.sin_family = AF_INET;
-	serverAddr.sin_port = htons(54000);
-	serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-	bind(listenSock, (sockaddr *)&serverAddr, sizeof(serverAddr));
-
-	listen(listenSock, SOMAXCONN);
-
-	// Assign initial value for the array of connection socket
-	int client[FD_SETSIZE], connSock;
-	fd_set readfds, initfds; //use initfds to initiate readfds at the begining of every loop step
-	sockaddr_in clientAddr;
-	int nEvents, ret;
-	socklen_t clientAddrLen = sizeof(clientAddr);
-	char buff[BUFF_SIZE];
-
-	for (size_t i = 0; i < FD_SETSIZE; i++)
-	{
-		client[i] = 0;
+	//Step 1: Construct a TCP socket to listen connection request
+	if ((listenfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+	{ /* calls socket() */
+		perror("\nError: ");
+		return 0;
 	}
-	FD_ZERO(&initfds); //Assign initial value for the fd_set
-	FD_SET(listenSock, &initfds);
 
-	// communicate with clients
-	while (true)
+	//Step 2: Bind address to socket
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+	servaddr.sin_port = htons(54000);
+
+	if (bind(listenfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) == -1)
+	{ /* calls bind() */
+		perror("\nError: ");
+		return 0;
+	}
+
+	//Step 3: Listen request from client
+	if (listen(listenfd, 20) == -1)
+	{ /* calls listen() */
+		perror("\nError: ");
+		return 0;
+	}
+
+	maxfd = listenfd; /* initialize */
+	maxi = -1;		  /* index into client[] array */
+	for (i = 0; i < FD_SETSIZE; i++)
+		client[i] = -1; /* -1 indicates available entry */
+	FD_ZERO(&allset);
+	FD_SET(listenfd, &allset);
+
+	//Step 4: Communicate with clients
+	while (1)
 	{
-
-		//Add listenSock to readfds
-		readfds = initfds;
-		nEvents = select(0, &readfds, 0, 0, 0);
-
-		if (nEvents < 0)
+		readfds = allset; /* structure assignment */
+		nready = select(maxfd + 1, &readfds, NULL, NULL, NULL);
+		if (nready < 0)
 		{
-			cout << "\nError! Cannot poll socket\n";
+			perror("\nError: ");
 			return 0;
 		}
 
-		// new client connection
-		if (FD_ISSET(listenSock, &readfds))
-		{ // if listenSock is in fd_set
-
-			if ((connSock = accept(listenSock, (sockaddr *)&clientAddr, &clientAddrLen)) < 0)
-			{
-				cout << "\nError! Cannot accept new connection";
-				break;
-			} // do accept function
-
+		if (FD_ISSET(listenfd, &readfds))
+		{ /* new client connection */
+			clilen = sizeof(cliaddr);
+			if ((connfd = accept(listenfd, (struct sockaddr *)&cliaddr, &clilen)) < 0)
+				perror("\nError: ");
 			else
 			{
-				cout << "\nConnection from [" << inet_ntoa(clientAddr.sin_addr) << ":" << ntohs(clientAddr.sin_port) << "]" << endl;
-
-				int i;
-
+				printf("You got a connection from %s\n", inet_ntoa(cliaddr.sin_addr)); /* prints client's IP */
 				for (i = 0; i < FD_SETSIZE; i++)
-
-					if (client[i] == 0)
+					if (client[i] < 0)
 					{
-						client[i] = connSock;
-						FD_SET(client[i], &initfds);
+						client[i] = connfd; /* save descriptor */
 						break;
 					}
-
 				if (i == FD_SETSIZE)
 				{
-					cout << "\nToo many clients.";
-					close(connSock);
+					printf("\nToo many clients");
+					close(connfd);
 				}
 
-				if (--nEvents == 0)
-					continue; //no more event
+				FD_SET(connfd, &allset); /* add new descriptor to set */
+				if (connfd > maxfd)
+					maxfd = connfd; /* for select */
+				if (i > maxi)
+					maxi = i; /* max index in client[] array */
+
+				if (--nready <= 0)
+					continue; /* no more readable descriptors */
 			}
 		}
-		// end of connection establishment phase
 
-		//receive data from clients
-		for (int i = 0; i < FD_SETSIZE; i++)
-		{
-
-			if (client[i] == 0) // if not connected skip
+		for (i = 0; i <= maxi; i++)
+		{ /* check all clients for data */
+			if ((sockfd = client[i]) < 0)
 				continue;
 
 			if (FD_ISSET(client[i], &readfds))
 			{ // if connected and in fd_set
 
-				ret = recv(client[i], buff, BUFF_SIZE, 0);
+				ret = recv(client[i], rcvBuff, BUFF_SIZE, 0);
 
 				if (ret <= 0)
-				{								 // if client disconnected
-					FD_CLR(client[i], &initfds); //clear it out of fd_set
-					close(client[i]);			 // close socket
+				{								// if client disconnected
+					FD_CLR(client[i], &allset); //clear it out of fd_set
+					close(client[i]);			// close socket
 					cout << "Close socket " << client[i] << endl;
 					client[i] = 0; // reset in client array
 				}
 
 				else
 				{
-					buff[ret] = '\0';
-					string buffString(buff); // convert buff to string type
+					rcvBuff[ret] = '\0';
+					string buffString(rcvBuff); // convert buff to string type
 					string notiString = "";
 					vector<string> buffPiece = split(buffString, ' '); // turn buffString to [command, argu1, argu2, etc...]
 					string currentUsername = findNick(client[i]);
@@ -691,14 +694,13 @@ int main(int argc, char **argv)
 				}
 			}
 
-			if (--nEvents <= 0)
-				continue; //no more event
+			if (--nready <= 0)
+				break; //no more event
 		}
+		// close listening socket
+		close(listenfd);
+
+		sqlite3_close(DB);
+		return 0;
 	}
-
-	// close listening socket
-	close(listenSock);
-
-	sqlite3_close(DB);
-	return (0);
 }
