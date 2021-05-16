@@ -143,11 +143,10 @@ int main(int argc, char **argv)
 				ret = recv(client[i], rcvBuff, BUFF_SIZE, 0);
 
 				if (ret <= 0)
-				{								// if client disconnected
-					FD_CLR(client[i], &allset); //clear it out of fd_set
-					close(client[i]);			// close socket
-					cout << "Close socket " << client[i] << endl;
-					client[i] = 0; // reset in client array
+				{
+					FD_CLR(sockfd, &allset);
+					close(sockfd);
+					client[i] = -1;
 				}
 
 				else
@@ -156,7 +155,7 @@ int main(int argc, char **argv)
 					string buffString(rcvBuff); // convert buff to string type
 					string notiString = "";
 					vector<string> buffPiece = split(buffString, ' '); // turn buffString to [command, argu1, argu2, etc...]
-					string currentUsername = findNick(client[i]);
+					string currentUsername = findNick(sockfd);
 
 					// SIGNUP: create account
 					if (buffPiece[0] == "SIGNUP")
@@ -164,33 +163,29 @@ int main(int argc, char **argv)
 						int found = -1;
 						if (buffPiece.size() != 3)
 						{
-							echoToClient(ERROR_NUMBER_OF_ARGUMENTS, client[i]);
+							echoToClient(ERROR_NUMBER_OF_ARGUMENTS, sockfd);
 							break;
 						}
 
 						if (currentUsername != "nonexist")
 						{
-							echoToClient("SIGN_OUT_FIRST", client[i]);
+							echoToClient("SIGN_OUT_FIRST", sockfd);
 							break;
 						}
 
 						string insertSql =
-							"INSERT INTO user VALUES (" + quotesql(buffPiece[1]) + "," + to_string(client[i]) + "," + quotesql(buffPiece[2]) + ", 1);";
+							"INSERT INTO user VALUES (" + quotesql(buffPiece[1]) + "," + to_string(sockfd) + "," + quotesql(buffPiece[2]) + ", 1);";
 
 						int result = sqlite3_exec(DB, insertSql.c_str(), NULL, 0, NULL);
 
 						if (result != SQLITE_OK)
 						{
-							echoToClient("FAIL USERNAME_ALREADY_EXIST", client[i]);
+							echoToClient("FAIL USERNAME_ALREADY_EXIST", sockfd);
 							break;
 						}
 
-						userList.clear();
-						string selectSql = "SELECT * FROM user;";
-
-						sqlite3_exec(DB, selectSql.c_str(), callback, 0, NULL);
 						// echo success SIGNUP command to client
-						echoToClient("SUCCESS", client[i]);
+						echoToClient("SUCCESS", sockfd);
 					}
 					// SIGNIN: sign in
 					else if (buffPiece[0] == "SIGNIN")
@@ -691,16 +686,22 @@ int main(int argc, char **argv)
 					//		echoToClient(notiString, client[i]);
 					//	}
 					//}
+					if (ret <= 0)
+					{
+						FD_CLR(sockfd, &allset);
+						close(sockfd);
+						client[i] = -1;
+					}
 				}
 			}
 
 			if (--nready <= 0)
-				break; //no more event
+				continue; //no more event
 		}
-		// close listening socket
-		close(listenfd);
-
-		sqlite3_close(DB);
-		return 0;
 	}
+	// close listening socket
+	close(listenfd);
+
+	sqlite3_close(DB);
+	return (0);
 }
